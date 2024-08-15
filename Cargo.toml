@@ -16,7 +16,7 @@ num-complex = "0.4.6"
 rustfft = "6.2.0"
 mel_spec = "0.2.3"
 mel_spec_audio = "0.2.2"
-ndarray = "0.15.6"
+ndarray = "0.16.1"
 ndarray-stats = "0.5.1"
 getrandom = { version = "0.2", features = ["js"] }
 wavers = {version = "1.4.3", features = ["ndarray"]}
