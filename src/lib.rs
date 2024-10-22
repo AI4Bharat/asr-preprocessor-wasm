@@ -1,12 +1,10 @@
 mod utils;
 use js_sys::{Array as JSArray, Float32Array as JSFloat32Array};
 use mel_spec::mel::mel;
-use ndarray::{concatenate, s, Array1, Array2, Array3, ArrayD, Axis, Dimension, Zip};
+use ndarray::{concatenate, s, Array1, Array2, Array3, Axis, Zip};
 use ndarray_stats::QuantileExt;
 use rustfft::{num_complex::Complex32, FftPlanner};
-use std::clone;
 use std::cmp::min;
-use std::convert::TryInto;
 use std::io::{BufReader, Cursor};
 use wasm_bindgen::prelude::*;
 use wavers::{IntoNdarray, ReadSeek, Wav};
@@ -280,7 +278,12 @@ fn array3_to_js_array(audio: Array3<f32>) -> JSArray {
     audio_array
 }
 
-fn js_array_to_array3(arr: JSArray, shape: &[usize]) -> Array3<f32> {
+fn js_array_to_array3(
+    arr: JSArray,
+    shape: &[usize],
+    vocab_start: usize,
+    vocab_end: usize,
+) -> Array3<f32> {
     let arr3 = Array3::from_shape_vec(
         (shape[0], shape[1], shape[2]),
         arr.to_vec()
@@ -290,7 +293,9 @@ fn js_array_to_array3(arr: JSArray, shape: &[usize]) -> Array3<f32> {
     )
     .unwrap();
 
-    arr3
+    let logits_arr = arr3.slice(s![.., .., vocab_start..vocab_end]).to_owned();
+    let blanks_arr = arr3.slice(s![.., .., (shape[2] - 1)..]).to_owned();
+    concatenate(Axis(2), &[logits_arr.view(), blanks_arr.view()]).unwrap()
 }
 
 #[wasm_bindgen]
@@ -323,21 +328,32 @@ pub fn run_preprocessor(audio_file: &[u8]) -> JSArray {
 }
 
 #[wasm_bindgen]
-pub fn decode_logprobs(logprobs: JSArray, shape: &[usize], vocab_arr: JSArray) -> JSArray {
-    let arr = js_array_to_array3(logprobs, shape);
+pub fn decode_logprobs(
+    logprobs: JSArray,
+    shape: &[usize],
+    vocab_arr: JSArray,
+    offset: usize,
+    actual_vocab_size: usize,
+) -> JSArray {
+    let vocab_start = offset * actual_vocab_size;
+    let vocab_end = vocab_start + actual_vocab_size;
+
+    let arr = js_array_to_array3(logprobs, shape, vocab_start, vocab_end);
+
     let argmax = get_argmax(&arr);
     let indices_batch = merge_logprobs(&argmax);
 
-    let vocab: Vec<String> = vocab_arr
-        .to_vec()
+    let mut vocab: Vec<String> = vocab_arr.to_vec()[vocab_start..vocab_end]
         .iter()
         .map(|a| a.as_string().unwrap())
         .collect();
 
+    vocab.push(String::from("b"));
+
     let text: JSArray = JSArray::new();
     for indices in indices_batch {
         let t = get_text(&vocab, indices);
-        text.push(&JsValue::from_str(&t.as_str()));
+        text.push(&JsValue::from_str(&t.as_str().trim()));
     }
 
     text
