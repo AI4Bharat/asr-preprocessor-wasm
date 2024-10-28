@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
     // `set_panic_hook` function at least once during initialization, and then
@@ -8,4 +10,10 @@ pub fn set_panic_hook() {
     // #[cfg(feature = "console_error_panic_hook")]
     #[cfg(debug_assertions)]
     console_error_panic_hook::set_once();
+}
+
+pub enum Value {
+    Text(String),
+    MapList(Vec<HashMap<String, Value>>),
+    Float(f32),
 }
